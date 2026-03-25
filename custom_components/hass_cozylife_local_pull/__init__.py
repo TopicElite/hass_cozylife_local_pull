@@ -1,4 +1,4 @@
-"""Example Load Platform integration."""
+"""CozyLife Local Pull integration."""
 from __future__ import annotations
 
 from homeassistant.core import HomeAssistant
@@ -19,24 +19,24 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    
     """
-    TODO:timer discover
-    config:{'lang': 'zh', 'ip': ['192.168.5.201', '192.168.5.202', '192.168.5.1']}
-}
+    Set up the CozyLife integration.
+    config example: {'lang': 'zh', 'ip': ['192.168.5.201', '192.168.5.202']}
     """
     ip = get_ip()
-    ip_from_config = config[DOMAIN].get('ip') if config[DOMAIN].get('ip') is not None else []    
+    ip_from_config = config[DOMAIN].get('ip') if config[DOMAIN].get('ip') is not None else []
     ip += ip_from_config
-    ip_list = []
-    [ip_list.append(i) for i in ip if i not in ip_list]
 
-    if 0 == len(ip_list):
+    # Deduplicate while preserving order
+    ip_list = list(dict.fromkeys(ip))
+
+    if not ip_list:
         _LOGGER.info('discover nothing')
         return True
 
-    _LOGGER.info('try conncet ip_list:', ip_list)
-    lang_from_config = (config[DOMAIN].get('lang') if config[DOMAIN].get('lang') is not None else LANG)
+    _LOGGER.info(f'try connect ip_list: {ip_list}')
+
+    lang_from_config = config[DOMAIN].get('lang') or LANG
     get_pid_list(lang_from_config)
 
     hass.data[DOMAIN] = {
@@ -45,11 +45,16 @@ def setup(hass: HomeAssistant, config: ConfigType) -> bool:
         'tcp_client': [tcp_client(item) for item in ip_list],
     }
 
-    #wait for get device info from tcp conncetion
-    #but it is bad
+    # Wait for devices to respond with their info via TCP.
+    # Not ideal (blocks setup), but required due to the synchronous TCP design.
     time.sleep(3)
-    # _LOGGER.info('setup', hass, config)
-    # hass.helpers.discovery.load_platform('sensor', DOMAIN, {}, config)
-    hass.loop.call_soon_threadsafe(hass.async_create_task, async_load_platform(hass, 'light', DOMAIN, {}, config))
-    hass.loop.call_soon_threadsafe(hass.async_create_task, async_load_platform(hass, 'switch', DOMAIN, {}, config))
+
+    hass.loop.call_soon_threadsafe(
+        hass.async_create_task,
+        async_load_platform(hass, 'light', DOMAIN, {}, config)
+    )
+    hass.loop.call_soon_threadsafe(
+        hass.async_create_task,
+        async_load_platform(hass, 'switch', DOMAIN, {}, config)
+    )
     return True
